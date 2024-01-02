@@ -20,6 +20,8 @@ DNS client talks to DNS resolver and it asks DNS resolver to query DNS on its be
 
 DNS Root or Root Zone Database is a list of top level domains. In other words, it is a collection of delegations.
 
+![DNS Root](./images/image-5.png)
+
 ### DNS Resolution:
 ![DNS Resolution](./images/image-6.png)
 
