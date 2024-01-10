@@ -1,0 +1,57 @@
+Parameters:
+  paramPersonalGitHubAccessToken:
+    Type: String
+    MinLength: 10
+    ConstraintDescription: Personal GitHub access token is missing
+    Description: Provide your personal GitHub access token for 
+CodeBuild to access your GitHub repo
+
+Resources:
+  chatGPTStaticWebsiteHostingBucket:
+    Type: 'AWS::S3::Bucket'
+    Properties:
+      BucketName: 'chatgpt-static-website'
+      VersioningConfiguration:
+        Status: 'Enabled'
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: ObjectWriter
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: false
+        BlockPublicPolicy: false
+        IgnorePublicAcls: false
+        RestrictPublicBuckets: false
+      WebsiteConfiguration:
+        IndexDocument: index.html
+        ErrorDocument: error.html
+
+  bucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref chatGPTStaticWebsiteHostingBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: 'PublicReadForGetBucketObjects'
+            Effect: 'Allow'
+            Principal: '*'
+            Action: 's3:GetObject'
+            Resource: !Join
+              - ''
+              - - 'arn:aws:s3:::'
+                - !Ref chatGPTStaticWebsiteHostingBucket
+                - '/*'
+
+  myCodeBuildSourceCredential:
+    Type: AWS::CodeBuild::SourceCredential
+    Properties:
+      AuthType: PERSONAL_ACCESS_TOKEN
+      ServerType: GITHUB
+      Token: !Ref paramPersonalGitHubAccessToken
+
+Outputs:
+  outputWebsiteURL:
+    Value: !GetAtt 
+      - chatGPTStaticWebsiteHostingBucket
+      - WebsiteURL
+    Description: Static website URL
