@@ -8,6 +8,10 @@ Parameters:
     Type: String
     Description: Name of the S3 bucket to store build artifact.
     Default: chatgpt-static-website
+  Route53HostedZoneId:
+    Type: String
+    Description: Id of the hosted zone of route53 for your domain.
+    Default: Z02001969XA6CYN24BKW
 
 Resources:
   chatGPTStaticWebsiteHostingBucket:
@@ -126,6 +130,41 @@ Resources:
         CloudWatchLogs:
           Status: ENABLED
           GroupName: chatgpt-3-codebuild-for-website-hosting-CloudWatchLogs
+
+  myRoute53RecordSetGroupForRootDomain:
+    Type: 'AWS::Route53::RecordSetGroup'
+    Properties:
+      HostedZoneId: !Ref Route53HostedZoneId
+      RecordSets:
+        - Name: ibrarmunir.co 
+          Type: A
+          AliasTarget:
+              DNSName: !Sub s3-website-${AWS::Region}.amazonaws.com
+              HostedZoneId: !FindInMap # note, that it is different from paramHostedZoneId - this hosted zone is for region that you created the bucket in!
+                - RegionMap
+                - !Ref 'AWS::Region'
+                - S3HostedZoneId
+
+Mappings:
+  RegionMap: # based on https://docs.aws.amazon.com/general/latest/gr/s3.html#s3_website_region_endpoints
+    us-east-1:
+      S3HostedZoneId: Z3AQBSTGFYJSTF
+    us-west-1:
+      S3HostedZoneId: Z2F56UZL2M1ACD
+    us-west-2:
+      S3HostedZoneId: Z3BJ6K6RIION7M
+    eu-central-1:
+      S3HostedZoneId: Z21DNDUVLTQW6Q
+    eu-west-1:
+      S3HostedZoneId: Z1BKCTXD74EZPE
+    ap-southeast-1:
+      S3HostedZoneId: Z3O0J2DXBE1FTB
+    ap-southeast-2:
+      S3HostedZoneId: Z1WCIGYICN2BYD
+    ap-northeast-1:
+      S3HostedZoneId: Z2M4EHUR26P7ZW
+    sa-east-1:
+      S3HostedZoneId: Z31GFT0UA1I2HV
 
 Outputs:
   outputWebsiteURL:

@@ -270,7 +270,7 @@ Select the scopes you'd like to grant this token.
 
 Click Generate token. Copy the new token - we will need it while running a CloudFormation stack.
 
-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
+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
 
 2️⃣ In CloudFormation template we are going to create a new AWS::CodeBuild::SourceCredential resource. Here we provide information about the credentials for a GitHub.
 
@@ -294,3 +294,244 @@ myCodeBuildSourceCredential:
 ```
 
 ### Step 3. Configure how AWS CodeBuild builds your source code
+
+AWS::CodeBuild::Project resource configures how AWS CodeBuild builds your source code, such as where to get the source code and which build environment to use.
+
+```yaml
+myCodeBuildProject:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Name: chatgpt-3-codebuild-for-website-hosting
+      Description: CodeBuild project for automatically build of static website hosted on s3
+```
+
+Let's define where to get source code under source property
+
+```yaml
+
+myCodeBuildProject:
+  Type: AWS::CodeBuild::Project
+  Properties:
+    Name: chatgpt-3-codebuild-for-website-hosting
+    Description: CodeBuild project for automatically build of static website hosted on s3
+    Source:
+      Type: 'GITHUB'
+      Location: 'https://github.com/ibrarmunircoder/react-aws-cfn-project.git'
+      GitCloneDepth: 1
+      Auth:
+        Resource: !Ref myCodeBuildSourceCredential
+        Type: OAUTH
+```
+
+In Triggers code settings for the CodeBuild project we want to enable AWS CodeBuild to begin automatically rebuilding the source code every time a code change is pushed to the repository. Basically we configured CodeBuild to listen to any git pushes to main branch to trigger the build.
+
+```yaml
+Triggers:
+  Webhook: true
+  FilterGroups:
+    - - Type: EVENT
+        Pattern: PUSH
+      - Type: HEAD_REF
+        Pattern: ^refs/heads/main # for feature branches use: ^refs/heads/feature/.*
+```
+
+In Environment code settings for the CodeBuild project we basically configured VM where CodeBuild is going to build the source code.
+
+```yaml
+Environment: # use Ubuntu standard v7
+  Type: LINUX_CONTAINER
+  ComputeType: BUILD_GENERAL1_SMALL
+  Image: aws/codebuild/amazonlinux2-x86_64-standard:4.0
+```
+
+But how do you know which container, computer and image you need? Well, based on the code source programming language and framework you can check for Docker images [here](https://docs.aws.amazon.com/codebuild/latest/userguide/build-env-ref-available.html) and Available runtimes [here](https://docs.aws.amazon.com/codebuild/latest/userguide/available-runtimes.html).
+
+As we have specified NodeJS v16 in our buildspec file, we can use either Amazon Linux 2 x86_64 standard:4.0 or Ubuntu standard:6.0.
+
+![Image](./images/image-17.png)
+
+Based on selected image I can get Image identifier from this [list](https://docs.aws.amazon.com/codebuild/latest/userguide/build-env-ref-available.html).
+
+![Image](./images/image-18.png)
+
+In Artifacts code settings for the CodeBuild project we want to specify what to do with build files. In our case we want to put them to our S3 bucket that hosts the static website. Note, it's very important to disable encryption for our website files.
+
+```yaml
+Artifacts: # drop the build artifacts of S3 bucket that hosts static website
+  Type: S3
+  Name: '/' # store the artifact in the root of the output bucket
+  Location: !Ref chatGPTStaticWebsiteHostingBucket
+  EncryptionDisabled: True #disable the encryption of artifacts in a build to see html pages
+```
+
+In ServiceRole code settings for the CodeBuild project we need to create a new role with proper access - see Step 4.
+
+```yaml
+myCodeBuildProject:
+  Type: AWS::CodeBuild::Project
+  Properties:
+    Name: chatgpt-3-codebuild-for-website-hosting
+    Description: CodeBuild project for automatically build of static website hosted on s3
+    ServiceRole: !Ref myCodeBuildProjectRole
+```
+
+### Step 4. Create IAM role for CodeBuild project
+
+IAM role for CodeBuild project to get an access to S3 bucket where static website is hosted and to CloudWatch logs to stream the logs while building the project.
+
+
+### Step 5. Run the CloudFormation stack
+
+Now we are ready to create and run CloudFormation stack based on our template for CodeBuild.
+
+Upload our template file to create a stack.
+
+![Create](./images/image-19.png)
+
+![PArameter](./images/image-20.png)
+
+
+Note: Delete the existing codebuild source credentails before creating an stack
+
+```bash
+aws codebuild list-source-credentials --profile test-user
+aws codebuild delete-source-credentials --arn arn:aws:codebuild:us-east-1:212446767488:token/github --profile test-user
+```
+
+## Important link (Access your source provider in CodeBuild)
+
+```https://docs.aws.amazon.com/codebuild/latest/userguide/access-tokens.html```
+
+Start the build manually first time.
+
+![Build](./images/image-21.png)
+
+Let's navigate to our website. Remember, we have created our stack for S3 bucket - under Outputs tab you can find the link to our website (note, your link might be different from mine):
+
+![Outputs](./images/image-22.png)
+
+![S3](./images/image-23.png)
+
+Voila! Our static website is up and running! It was built and deployed to S3 with the initial provisioning of our CodeBuild project.
+
+![Website](./images/image-24.png)
+
+### Step 6. Update frontend source code and watch how it will be built automatically
+
+Now it's time to check out build automation.
+
+1️⃣ Let's make a small change (it's totally up to you) in our source code for static website.
+
+Let's make some changes in src\containers\src\header\Header.js file. I want to change GPT-3 to GPT-4
+
+![code change](./images/image-25.png)
+
+Push the changes into your repository. 
+
+2️⃣ Once you pushed your changes to GitHub and navigate to our CodeBuild project on AWS Console, you should see that build was triggered automatically and its status is in progress:
+
+![Build](./images/image-26.png)
+
+3️⃣ Once build status has changed to Succeeded, go ahead and refresh your website link. You should see the code changes.
+
+![Updated Website](./images/image-28.png)
+
+Note, that all our logs for build were stored under newly created chatgpt-3-codebuild-for-website-hosting-CloudWatchLogs log group.
+
+![CloudWatch](./images/image-27.png)
+
+
+## Module 3. Use Your Custom Domain for Static Website Hosted on AWS S3 via Route 53 and CloudFormation
+
+### Overview
+
+In Module 1, we have created a simple static website and hosted it on S3 bucket. To access our website we used Amazon S3 website endpoint which looked like http://example.s3-website-us-east-1.amazonaws.com. However for users the link is too long and hard to remember. If you want your website appear legitimate to visitors you should use a custom domain name such as http://example.com.
+
+## Architecture
+
+The high-level architecture for our project is illustrated in the diagram below:
+
+![Archiecture](./images/image-29.png)
+
+### Why use domain name?
+Why should you get a custom domain? Let's break it down!
+
+☑️ Brand Superpowers: A custom domain name represents your brand and helps people easily recognize and remember you. Keep it consistent and unleash your brand's power.
+
+☑️ Credibility Boost: With a custom domain, your website becomes the ultimate credibility booster. It shows visitors that you mean business and adds a professional touch.
+
+☑️ Portability: With a custom domain, you can seamlessly move to different web hosting providers or website platforms while keeping the same web address.
+
+### Create an S3 bucket for your root domain
+
+To configure S3 bucket with Route 53 we need to make some adjustments.
+
+📌 When you configure an Amazon S3 bucket for website hosting, you must give the bucket the same name as the record that you want to use to route traffic to the bucket. For example, if you want to route traffic for example.com to an S3 bucket that is configured for website hosting, the name of the bucket must be example.com.
+
+
+### Create Route 53 record set to route your traffic for your domain to S3 bucket
+
+After you create a hosted zone for your domain, such as example.com, you need to create records to tell the Domain Name System (DNS) how you want traffic to be routed for that domain.
+
+1️⃣ In our case we need to create a record to route internet traffic from root domain (such as example.com) to S3 bucket that hosts static website
+
+![Route53](./images/image-30.png)
+
+Remember, I have already created route53 hosted zone for my root domain. I will use this hosted zone to create records via cloudformation. I need Hosted zone id while creating records inside that hosted zone.
+
+![Zone](./images/image-31.png)
+
+The following piece of code helps to create a new record for S3 bucket for root domain:
+
+```yaml
+myRoute53RecordSetGroupForRootDomain:
+  Type: 'AWS::Route53::RecordSetGroup'
+  Properties:
+    HostedZoneId: !Ref paramHostedZoneId
+    RecordSets:
+      - Name: ibrarmunir.co 
+        Type: A
+        AliasTarget:
+            DNSName: !Sub s3-website-${AWS::Region}.amazonaws.com
+            HostedZoneId: !FindInMap # note, that it is different from paramHostedZoneId - this hosted zone is for region that you created the bucket in!
+              - RegionMap
+              - !Ref 'AWS::Region'
+              - S3HostedZoneId
+```
+
+📌 Note: HostedZoneId specified under AliasTarget is different from hosted zone id that we have created in Route 53 for our domain in Step 4. Hosted zone id for S3 is a magical alphanumeric ID provided by AWS team. It varies base on the region that you created the bucket in. That's why we used mapping to map S3 hosted zone id to region:
+
+```yaml
+Mappings:
+  RegionMap: # based on https://docs.aws.amazon.com/general/latest/gr/s3.html#s3_website_region_endpoints
+    us-east-1:
+      S3HostedZoneId: Z3AQBSTGFYJSTF
+    us-west-1:
+      S3HostedZoneId: Z2F56UZL2M1ACD
+    us-west-2:
+      S3HostedZoneId: Z3BJ6K6RIION7M
+    eu-central-1:
+      S3HostedZoneId: Z21DNDUVLTQW6Q
+    eu-west-1:
+      S3HostedZoneId: Z1BKCTXD74EZPE
+    ap-southeast-1:
+      S3HostedZoneId: Z3O0J2DXBE1FTB
+    ap-southeast-2:
+      S3HostedZoneId: Z1WCIGYICN2BYD
+    ap-northeast-1:
+      S3HostedZoneId: Z2M4EHUR26P7ZW
+    sa-east-1:
+      S3HostedZoneId: Z31GFT0UA1I2HV
+```
+
+See the whole list of hosted zone ids for S3 [here](https://docs.aws.amazon.com/general/latest/gr/s3.html#s3_website_region_endpoints).
+
+
+### Run the CloudFormation stack
+
+Now we are ready to create and run CloudFormation stack based on our template for Record Sets.
+
+![Create](./images/image-32.png)
+![Create](./images/image-33.png)
+
+![Website](./images/image-34.png)
